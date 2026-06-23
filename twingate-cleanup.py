@@ -3,7 +3,7 @@
 Twingate Stale User Cleanup Script
 
 Lists and optionally removes:
-  - MANUAL users (non-ADMIN) with no device login activity for 90+ days
+  - MANUAL users (non-ADMIN) with no device activity (connection or login) for 90+ days
   - PENDING accounts created over 30 days ago (invited but never activated)
 
 Requires:
@@ -240,6 +240,7 @@ query {
               name
               lastSuccessfulLoginAt
               lastFailedLoginAt
+              lastConnectedAt
             }
           }
         }
@@ -269,7 +270,11 @@ def fetch_all_users(token, network_id):
 
 
 def get_latest_device_activity(user):
-    """Get the most recent device activity timestamp for a user."""
+    """Get the most recent device activity timestamp for a user.
+
+    Checks both lastConnectedAt (actual usage) and lastSuccessfulLoginAt (authentication).
+    Uses the most recent timestamp from either field across all devices.
+    """
     devices = user.get("devices", {}).get("edges", [])
 
     if not devices:
@@ -279,15 +284,21 @@ def get_latest_device_activity(user):
 
     for device_edge in devices:
         device = device_edge.get("node", {})
-        last_login = device.get("lastSuccessfulLoginAt")
 
-        if last_login:
-            try:
-                login_dt = datetime.fromisoformat(last_login.replace("Z", "+00:00"))
-                if latest_activity is None or login_dt > latest_activity:
-                    latest_activity = login_dt
-            except Exception:
-                continue
+        # Check both connected and login timestamps
+        timestamps = [
+            device.get("lastConnectedAt"),
+            device.get("lastSuccessfulLoginAt"),
+        ]
+
+        for ts in timestamps:
+            if ts:
+                try:
+                    ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    if latest_activity is None or ts_dt > latest_activity:
+                        latest_activity = ts_dt
+                except Exception:
+                    continue
 
     return latest_activity
 
@@ -486,7 +497,7 @@ def main():
 
         # Print summary by category
         out.write("=" * 100)
-        out.write("CATEGORY: Inactive for 90+ days (no device login activity)")
+        out.write("CATEGORY: Inactive for 90+ days (no device connection or login activity)")
         out.write("=" * 100)
         for u, extra in inactive:
             out.write(build_display(u, extra))

@@ -4,7 +4,7 @@ clean up twingate accounts
 Twingate Stale User Cleanup Script
 
 Lists and optionally removes:
-  - MANUAL users (non-ADMIN) with no device login activity for 90+ days
+  - MANUAL users (non-ADMIN) with no device activity (connection or login) for 90+ days
   - PENDING accounts created over 30 days ago (invited but never activated)
 
 Requires:
