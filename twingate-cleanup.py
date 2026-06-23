@@ -3,8 +3,13 @@
 Twingate Stale User Cleanup Script
 
 Lists and optionally removes:
-  - MANUAL users (non-ADMIN) with no device activity (connection or login) for 90+ days
+  - MANUAL users (non-ADMIN) with no device activity (login/auth) for 90+ days
   - PENDING accounts created over 30 days ago (invited but never activated)
+
+NOTE: Activity tracking is based on device lastSuccessfulLoginAt (authentication events).
+The Twingate GraphQL API may not return lastConnectedAt (actual connection activity)
+for all devices or API token permission levels. If lastConnectedAt is unavailable,
+the script falls back to lastSuccessfulLoginAt which may not reflect daily usage.
 
 Requires:
   - A Twingate Access Token (from Admin Console → Settings → API Tokens)
