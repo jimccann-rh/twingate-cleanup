@@ -269,7 +269,7 @@ def fetch_all_users(token, network_id):
     return all_users
 
 
-def get_latest_device_activity(user):
+def get_latest_device_activity(user, debug=False):
     """Get the most recent device activity timestamp for a user.
 
     Checks both lastConnectedAt (actual usage) and lastSuccessfulLoginAt (authentication).
@@ -281,15 +281,22 @@ def get_latest_device_activity(user):
         return None
 
     latest_activity = None
+    email = user.get("email", "unknown")
 
     for device_edge in devices:
         device = device_edge.get("node", {})
+        device_name = device.get("name", "unknown")
 
         # Check both connected and login timestamps
-        timestamps = [
-            device.get("lastConnectedAt"),
-            device.get("lastSuccessfulLoginAt"),
-        ]
+        last_connected = device.get("lastConnectedAt")
+        last_login = device.get("lastSuccessfulLoginAt")
+
+        if debug and globals().get('DEBUG_MODE', False):
+            print(f"  [DEBUG] Device '{device_name}' for {email}:")
+            print(f"    lastConnectedAt: {last_connected}")
+            print(f"    lastSuccessfulLoginAt: {last_login}")
+
+        timestamps = [last_connected, last_login]
 
         for ts in timestamps:
             if ts:
@@ -297,8 +304,13 @@ def get_latest_device_activity(user):
                     ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                     if latest_activity is None or ts_dt > latest_activity:
                         latest_activity = ts_dt
-                except Exception:
+                except Exception as e:
+                    if debug and globals().get('DEBUG_MODE', False):
+                        print(f"    [DEBUG] Failed to parse timestamp '{ts}': {e}")
                     continue
+
+    if debug and globals().get('DEBUG_MODE', False):
+        print(f"  [DEBUG] Latest activity for {email}: {latest_activity}")
 
     return latest_activity
 
@@ -343,7 +355,7 @@ def classify_users(users):
             continue
 
         # For active users, check device activity
-        latest_activity = get_latest_device_activity(u)
+        latest_activity = get_latest_device_activity(u, debug=globals().get('DEBUG_MODE', False))
 
         if latest_activity is None:
             # User has no devices or no successful logins
