@@ -3,7 +3,7 @@
 Twingate Stale User Cleanup Script
 
 Lists and optionally removes:
-  - MANUAL users (non-ADMIN) with no activity (updatedAt) for 90+ days
+  - MANUAL users (non-ADMIN) with no device login activity for 90+ days
   - PENDING accounts created over 30 days ago (invited but never activated)
 
 Requires:
@@ -233,6 +233,16 @@ query {
         state
         createdAt
         updatedAt
+        devices {
+          edges {
+            node {
+              id
+              name
+              lastSuccessfulLoginAt
+              lastFailedLoginAt
+            }
+          }
+        }
       }
     }
   }
@@ -258,13 +268,37 @@ def fetch_all_users(token, network_id):
     return all_users
 
 
+def get_latest_device_activity(user):
+    """Get the most recent device activity timestamp for a user."""
+    devices = user.get("devices", {}).get("edges", [])
+
+    if not devices:
+        return None
+
+    latest_activity = None
+
+    for device_edge in devices:
+        device = device_edge.get("node", {})
+        last_login = device.get("lastSuccessfulLoginAt")
+
+        if last_login:
+            try:
+                login_dt = datetime.fromisoformat(last_login.replace("Z", "+00:00"))
+                if latest_activity is None or login_dt > latest_activity:
+                    latest_activity = login_dt
+            except Exception:
+                continue
+
+    return latest_activity
+
+
 def classify_users(users):
     """Separate users into cleanup candidates based on the criteria."""
     from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)
 
-    inactive_users = []   # accounts with no recent activity (based on updatedAt)
+    inactive_users = []   # accounts with no device activity for 90+ days
     never_login_users = []  # created > 30d ago, state=PENDING (never activated)
     other_users = []
 
@@ -282,7 +316,6 @@ def classify_users(users):
             continue
 
         created = u.get("createdAt")
-        updated = u.get("updatedAt")
         state = u.get("state")
 
         # Check if user is PENDING (invited but never logged in)
@@ -298,19 +331,31 @@ def classify_users(users):
                     other_users.append((u, "state=PENDING, invalid createdAt"))
             continue
 
-        # For active users, check updatedAt as a proxy for activity
-        if updated:
-            try:
-                updated_dt = datetime.fromisoformat(updated.replace("Z", "+00:00"))
-                inactive_days = (now - updated_dt).days
-                if inactive_days >= INACTIVE_DAYS:
-                    inactive_users.append((u, f"no updates for {inactive_days}d"))
-                else:
-                    other_users.append((u, f"updated {inactive_days}d ago"))
-            except Exception:
-                other_users.append((u, "invalid updatedAt"))
+        # For active users, check device activity
+        latest_activity = get_latest_device_activity(u)
+
+        if latest_activity is None:
+            # User has no devices or no successful logins
+            # Check when account was created - if old, it's a candidate
+            if created:
+                try:
+                    created_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    days_since_created = (now - created_dt).days
+                    if days_since_created >= INACTIVE_DAYS:
+                        inactive_users.append((u, f"no device activity, created {days_since_created}d ago"))
+                    else:
+                        other_users.append((u, f"no device activity, created {days_since_created}d ago"))
+                except Exception:
+                    other_users.append((u, "no device activity, invalid createdAt"))
+            else:
+                other_users.append((u, "no device activity, no createdAt"))
         else:
-            other_users.append((u, "no updatedAt field"))
+            # Check when they last logged in
+            inactive_days = (now - latest_activity).days
+            if inactive_days >= INACTIVE_DAYS:
+                inactive_users.append((u, f"last device login {inactive_days}d ago"))
+            else:
+                other_users.append((u, f"last device login {inactive_days}d ago"))
 
     return inactive_users, never_login_users, other_users
 
@@ -322,8 +367,18 @@ def build_display(user, extra=""):
     state = user.get("state") or "ACTIVE"
     email = user.get("email") or "N/A"
     name = f"{user.get('firstName', '')} {user.get('lastName', '')}".strip() or email
-    updated = user.get("updatedAt", "")[:10] if user.get("updatedAt") else "N/A"
-    return f"  - {name:<35} | {email:<30} | {role:<10} | {state:<10} | updated:{updated:<12} | {extra}"
+
+    # Get device count and latest activity
+    devices = user.get("devices", {}).get("edges", [])
+    device_count = len(devices)
+    latest_activity = get_latest_device_activity(user)
+
+    if latest_activity:
+        last_login_str = latest_activity.strftime("%Y-%m-%d")
+    else:
+        last_login_str = "never"
+
+    return f"  - {name:<35} | {email:<30} | {role:<10} | {state:<10} | devices:{device_count} | last:{last_login_str:<12} | {extra}"
 
 
 class OutputWriter:
@@ -431,7 +486,7 @@ def main():
 
         # Print summary by category
         out.write("=" * 100)
-        out.write("CATEGORY: Inactive for 90+ days (no activity based on updatedAt)")
+        out.write("CATEGORY: Inactive for 90+ days (no device login activity)")
         out.write("=" * 100)
         for u, extra in inactive:
             out.write(build_display(u, extra))
