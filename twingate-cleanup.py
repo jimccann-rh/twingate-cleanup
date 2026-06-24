@@ -3,8 +3,8 @@
 Twingate Stale User Cleanup Script
 
 Lists and optionally removes:
-  - MANUAL users (non-ADMIN) with no device activity (login/auth) for 90+ days
-  - PENDING accounts created over 30 days ago (invited but never activated)
+  - MANUAL users (non-ADMIN) with no device activity (login/auth) for 90+ days (configurable)
+  - PENDING accounts created over 30 days ago (invited but never activated) (configurable)
 
 NOTE: Activity tracking is based on device lastSuccessfulLoginAt (authentication events).
 The Twingate GraphQL API may not return lastConnectedAt (actual connection activity)
@@ -514,14 +514,14 @@ def main():
 
         # Print summary by category
         out.write("=" * 100)
-        out.write("CATEGORY: Inactive for 90+ days (no device connection or login activity)")
+        out.write(f"CATEGORY: Inactive for {INACTIVE_DAYS}+ days (no device connection or login activity)")
         out.write("=" * 100)
         for u, extra in inactive:
             out.write(build_display(u, extra))
 
         out.write()
         out.write("=" * 100)
-        out.write("CATEGORY: PENDING users - invited but never activated (created 30+ days ago)")
+        out.write(f"CATEGORY: PENDING users - invited but never activated (created {NEVER_LOGIN_DAYS}+ days ago)")
         out.write("=" * 100)
         for u in never_login:
             out.write(build_display(u, f"created {u.get('createdAt', '')!r}"))
