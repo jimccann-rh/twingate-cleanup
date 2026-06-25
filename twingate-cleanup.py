@@ -32,6 +32,9 @@ Usage:
   # Live run with single-user confirmation (prompt for each deletion)
   TWINGATE_ACCESS_TOKEN=twt_v0... TWINGATE_NETWORK_ID=networkidhere python3 twingate-cleanup.py --live --single
 
+  # Live run with force mode (no confirmation prompts - use with caution!)
+  TWINGATE_ACCESS_TOKEN=twt_v0... TWINGATE_NETWORK_ID=networkidhere python3 twingate-cleanup.py --live --force
+
   # Live run with output saved
   TWINGATE_ACCESS_TOKEN=twt_v0... TWINGATE_NETWORK_ID=networkidhere python3 twingate-cleanup.py \
     --live --output-dir /root/cleanuptwingateusers
@@ -460,6 +463,7 @@ def main():
                         help="Directory to save output report (e.g., /root/cleanuptwingateusers)")
     parser.add_argument("--debug", action="store_true", help="Enable debug output (shows API requests/responses)")
     parser.add_argument("--single", action="store_true", help="Prompt for each user deletion individually (requires --live)")
+    parser.add_argument("--force", action="store_true", help="Skip confirmation prompts (requires --live)")
     args = parser.parse_args()
 
     token = gql_access_token()
@@ -468,11 +472,22 @@ def main():
     live_mode = args.live
     debug_mode = args.debug
     single_mode = args.single
+    force_mode = args.force
 
     # Validate arguments
     if single_mode and not live_mode:
         print("ERROR: --single requires --live flag")
         print("The --single flag prompts for each deletion, which only makes sense in live mode.")
+        sys.exit(1)
+
+    if force_mode and not live_mode:
+        print("ERROR: --force requires --live flag")
+        print("The --force flag skips deletion prompts, which only makes sense in live mode.")
+        sys.exit(1)
+
+    if single_mode and force_mode:
+        print("ERROR: --single and --force are mutually exclusive")
+        print("--single prompts for each user, --force skips all prompts.")
         sys.exit(1)
 
     # Store debug mode in a global so other functions can access it
@@ -553,7 +568,8 @@ def main():
             return
 
         # In single mode, skip the bulk confirmation (we'll ask per-user)
-        if not single_mode:
+        # In force mode, skip all confirmations
+        if not single_mode and not force_mode:
             confirm = input(f"\n🔥 You are about to PERMANENTLY delete {total_remove} user(s). Continue? [y/N]: ")
             if confirm.lower() != "y":
                 out.write("\nAborted by user.")
@@ -564,6 +580,8 @@ def main():
         out.write()
         if single_mode:
             out.write("--- Deleting users (single mode - prompting for each) ---")
+        elif force_mode:
+            out.write("--- Deleting users (force mode - no prompts) ---")
         else:
             out.write("--- Deleting users ---")
         deleted = []

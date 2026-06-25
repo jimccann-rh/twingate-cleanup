@@ -41,6 +41,9 @@ Usage:
   # Live run with single-user confirmation (prompt for each deletion)
   TWINGATE_ACCESS_TOKEN=twt_v0... TWINGATE_NETWORK_ID=networkidhere python3 twingate-cleanup.py --live --single
 
+  # Live run with force mode (no confirmation prompts - use with caution!)
+  TWINGATE_ACCESS_TOKEN=twt_v0... TWINGATE_NETWORK_ID=networkidhere python3 twingate-cleanup.py --live --force
+
   # Live run with output saved
   TWINGATE_ACCESS_TOKEN=twt_v0... TWINGATE_NETWORK_ID=networkidhere python3 twingate-cleanup.py \
     --live --output-dir /root/cleanuptwingateusers
@@ -50,6 +53,7 @@ Options:
   --output-dir DIR    Save report to timestamped file in specified directory
   --debug             Show detailed API requests and responses
   --single            Prompt for confirmation on each user deletion individually (requires --live)
+  --force             Skip all confirmation prompts - deletes immediately (requires --live, mutually exclusive with --single)
 
 Output files are named: twingate_cleanup_{network}_{timestamp}.txt
 Example: twingate_cleanup_networkidhere_20260623_143052.txt
